@@ -1,0 +1,48 @@
+services:
+  bls-pipeline:
+    build: .
+    container_name: bls-pipeline
+    volumes:
+      - ./.env:/app/.env:ro
+    command: ["--status"]
+    restart: "no"
+
+  bls-pipeline-all:
+    build: .
+    container_name: bls-pipeline-all
+    volumes:
+      - ./.env:/app/.env:ro
+    command: []
+    restart: "no"
+    profiles:
+      - all
+
+  bls-pipeline-cpi:
+    build: .
+    container_name: bls-pipeline-cpi
+    volumes:
+      - ./.env:/app/.env:ro
+    command: ["-d", "cpi"]
+    restart: "no"
+    profiles:
+      - cpi
+
+  bls-pipeline-ppi:
+    build: .
+    container_name: bls-pipeline-ppi
+    volumes:
+      - ./.env:/app/.env:ro
+    command: ["-d", "ppi"]
+    restart: "no"
+    profiles:
+      - ppi
+
+  bls-pipeline-employment:
+    build: .
+    container_name: bls-pipeline-employment
+    volumes:
+      - ./.env:/app/.env:ro
+    command: ["-d", "employment"]
+    restart: "no"
+    profiles:
+      - employment

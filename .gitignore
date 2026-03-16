@@ -1,0 +1,24 @@
+# Environment files (contain secrets)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+
+# GCS credentials
+*.json
+
+# OS files
+.DS_Store
+-e 
+oe.data.*
+oe_data.txt
+*.db
+*.RData
+*.Rhistory
+employment_load.log
