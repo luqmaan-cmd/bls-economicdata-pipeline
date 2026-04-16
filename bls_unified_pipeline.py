@@ -13,8 +13,11 @@ from datetime import datetime
 from typing import List, Optional, Set, Tuple, Dict
 from email.utils import parsedate_to_datetime
 from dotenv import load_dotenv
+import urllib3
 
 load_dotenv()
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 DOWNLOAD_SEMAPHORE = threading.Semaphore(3)
 DOWNLOAD_DELAY = 0.2
@@ -38,6 +41,26 @@ GCS_BUCKET = os.environ.get("GCS_BUCKET", "bls-econ-data")
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
+
+PROXY_USER = os.environ.get("PROXY_USER", "")
+PROXY_PASS = os.environ.get("PROXY_PASS", "")
+PROXY_HOST = os.environ.get("PROXY_HOST", "unblock.oxylabs.io")
+PROXY_PORT = os.environ.get("PROXY_PORT", "60000")
+PROXY_VERIFY_SSL = os.environ.get("PROXY_VERIFY_SSL", "false").lower() == "true"
+
+def get_proxies():
+    if PROXY_USER and PROXY_PASS:
+        proxy_url = f"http://{PROXY_USER}:{PROXY_PASS}@{PROXY_HOST}:{PROXY_PORT}"
+        return {
+            "http": proxy_url,
+            "https": proxy_url
+        }
+    return None
+
+def should_verify_ssl():
+    if get_proxies() and not PROXY_VERIFY_SSL:
+        return False
+    return True
 
 BLS_DATASETS = {
     "cpi": {
@@ -257,7 +280,7 @@ def ensure_table_exists(table_name: str, schema_file: str) -> bool:
 
 def get_etag_and_last_modified(url: str) -> Tuple[Optional[str], Optional[datetime]]:
     try:
-        response = requests.head(url, headers=HEADERS, timeout=30, allow_redirects=True)
+        response = requests.head(url, headers=HEADERS, timeout=30, allow_redirects=True, proxies=get_proxies(), verify=should_verify_ssl())
         etag = response.headers.get('ETag', '').strip('"')
         last_modified_str = response.headers.get('Last-Modified')
         last_modified = None
@@ -318,7 +341,7 @@ def should_reload(dataset: str, data_key: str, current_etag: Optional[str]) -> b
 
 def check_url_available(url: str) -> bool:
     try:
-        response = requests.head(url, headers=HEADERS, timeout=30, allow_redirects=True)
+        response = requests.head(url, headers=HEADERS, timeout=30, allow_redirects=True, proxies=get_proxies(), verify=should_verify_ssl())
         return response.status_code == 200
     except:
         return False
@@ -328,7 +351,7 @@ def download_to_gcs(url: str, gcs_path: str, client) -> int:
     blob = bucket.blob(gcs_path)
     
     print(f"  Downloading from: {url}")
-    response = requests.get(url, headers=HEADERS, stream=True, timeout=600)
+    response = requests.get(url, headers=HEADERS, stream=True, timeout=600, proxies=get_proxies(), verify=should_verify_ssl())
     response.raise_for_status()
     
     total_size = int(response.headers.get('content-length', 0))
@@ -399,7 +422,7 @@ def stream_url_to_gcs_and_process(url: str, gcs_path: str, client, process_line_
     blob = bucket.blob(gcs_path)
     
     print(f"  Streaming from: {url}")
-    response = requests.get(url, headers=HEADERS, stream=True, timeout=600)
+    response = requests.get(url, headers=HEADERS, stream=True, timeout=600, proxies=get_proxies(), verify=should_verify_ssl())
     response.raise_for_status()
     
     total_size = int(response.headers.get('content-length', 0))
@@ -507,6 +530,8 @@ def copy_from_gcs_to_table(gcs_path: str, table: str, columns: List[str], client
                         continue
                     
                     parts = line.split('\t')
+                    if len(parts) < len(columns):
+                        continue
                     parts = parts[:len(columns)]
                     cleaned = []
                     for p in parts:
