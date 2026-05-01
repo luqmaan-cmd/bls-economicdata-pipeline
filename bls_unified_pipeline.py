@@ -1377,15 +1377,18 @@ def load_la_denormalized(client, config: dict, force: bool = False) -> bool:
             SELECT 
                 d.series_id, d.year, d.period,
                 CASE d.period
-                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
-                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
-                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
-                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
-                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
-                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
-                    WHEN 'M13' THEN 'Annual Average'
-                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
-                    WHEN 'S03' THEN 'Annual Average'
+                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                    WHEN 'M13' THEN 'AN AV'
+                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                    WHEN 'S03' THEN 'AN AV'
+                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                    WHEN 'A01' THEN 'AN AV'
                     ELSE d.period
                 END,
                 d.value,
@@ -1587,15 +1590,18 @@ def load_jt_denormalized(client, config: dict, force: bool = False) -> bool:
             SELECT 
                 d.series_id, d.year, d.period,
                 CASE d.period
-                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
-                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
-                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
-                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
-                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
-                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
-                    WHEN 'M13' THEN 'Annual Average'
-                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
-                    WHEN 'S03' THEN 'Annual Average'
+                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                    WHEN 'M13' THEN 'AN AV'
+                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                    WHEN 'S03' THEN 'AN AV'
+                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                    WHEN 'A01' THEN 'AN AV'
                     ELSE d.period
                 END,
                 d.value,
@@ -1785,15 +1791,18 @@ def load_sa_denormalized(client, config: dict, force: bool = False) -> bool:
             SELECT 
                 d.series_id, d.year, d.period,
                 CASE d.period
-                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
-                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
-                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
-                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
-                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
-                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
-                    WHEN 'M13' THEN 'Annual Average'
-                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
-                    WHEN 'S03' THEN 'Annual Average'
+                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                    WHEN 'M13' THEN 'AN AV'
+                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                    WHEN 'S03' THEN 'AN AV'
+                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                    WHEN 'A01' THEN 'AN AV'
                     ELSE d.period
                 END,
                 d.value,
@@ -2000,15 +2009,18 @@ def load_oe_denormalized(client, config: dict, force: bool = False) -> bool:
             SELECT 
                 d.series_id, d.year, d.period,
                 CASE d.period
-                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
-                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
-                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
-                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
-                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
-                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
-                    WHEN 'M13' THEN 'Annual Average'
-                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
-                    WHEN 'S03' THEN 'Annual Average'
+                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                    WHEN 'M13' THEN 'AN AV'
+                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                    WHEN 'S03' THEN 'AN AV'
+                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                    WHEN 'A01' THEN 'AN AV'
                     ELSE d.period
                 END,
                 d.value,
@@ -2209,15 +2221,18 @@ def load_ci_denormalized(client, config: dict, force: bool = False) -> bool:
             SELECT 
                 d.series_id, d.year, d.period,
                 CASE d.period
-                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
-                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
-                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
-                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
-                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
-                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
-                    WHEN 'M13' THEN 'Annual Average'
-                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
-                    WHEN 'S03' THEN 'Annual Average'
+                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                    WHEN 'M13' THEN 'AN AV'
+                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                    WHEN 'S03' THEN 'AN AV'
+                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                    WHEN 'A01' THEN 'AN AV'
                     ELSE d.period
                 END,
                 d.value,
@@ -2408,15 +2423,18 @@ def load_mp_denormalized(client, config: dict, force: bool = False) -> bool:
             SELECT 
                 d.series_id, d.year, d.period,
                 CASE d.period
-                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
-                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
-                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
-                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
-                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
-                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
-                    WHEN 'M13' THEN 'Annual Average'
-                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
-                    WHEN 'S03' THEN 'Annual Average'
+                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                    WHEN 'M13' THEN 'AN AV'
+                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                    WHEN 'S03' THEN 'AN AV'
+                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                    WHEN 'A01' THEN 'AN AV'
                     ELSE d.period
                 END,
                 d.value,
@@ -2602,15 +2620,18 @@ def load_sm_denormalized(client, config: dict, force: bool = False) -> bool:
             SELECT 
                 d.series_id, d.year, d.period,
                 CASE d.period
-                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
-                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
-                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
-                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
-                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
-                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
-                    WHEN 'M13' THEN 'Annual Average'
-                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
-                    WHEN 'S03' THEN 'Annual Average'
+                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                    WHEN 'M13' THEN 'AN AV'
+                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                    WHEN 'S03' THEN 'AN AV'
+                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                    WHEN 'A01' THEN 'AN AV'
                     ELSE d.period
                 END,
                 d.value,
