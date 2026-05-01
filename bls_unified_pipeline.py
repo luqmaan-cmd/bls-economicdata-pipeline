@@ -1369,45 +1369,55 @@ def load_la_denormalized(client, config: dict, force: bool = False) -> bool:
         cur.execute(f"TRUNCATE TABLE {table}")
         conn.commit()
         
-        cur.execute(f"""
-            INSERT INTO {table} 
-            (series_id, year, period, period_name, value, area_type_code, area_type_name,
-             area_code, area_name, measure_code, measure_name, seasonal_code, seasonal_name,
-             state_code, state_name, footnote_codes)
-            SELECT 
-                d.series_id, d.year, d.period,
-                CASE d.period
-                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
-                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
-                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
-                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
-                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
-                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
-                    WHEN 'M13' THEN 'AN AV'
-                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
-                    WHEN 'S03' THEN 'AN AV'
-                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
-                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
-                    WHEN 'A01' THEN 'AN AV'
-                    ELSE d.period
-                END,
-                d.value,
-                s.area_type_code, at.name,
-                s.area_code, a.name,
-                s.measure_code, m.name,
-                s.seasonal, seas.name,
-                s.srd_code, st.name,
-                d.footnote_codes
-            FROM la_data_temp d
-            JOIN la_series_temp s ON d.series_id = s.series_id
-            LEFT JOIN la_area_type_temp at ON s.area_type_code = at.code
-            LEFT JOIN la_area_temp a ON s.area_code = a.code
-            LEFT JOIN la_measure_temp m ON s.measure_code = m.code
-            LEFT JOIN la_seasonal_temp seas ON s.seasonal = seas.code
-            LEFT JOIN la_state_temp st ON s.srd_code = st.code
-        """)
-        rows_loaded = cur.rowcount
-        conn.commit()
+        # Get year range for chunked insert to avoid statement timeout
+        cur.execute("SELECT MIN(year), MAX(year) FROM la_data_temp")
+        min_year, max_year = cur.fetchone()
+        CHUNK_YEARS = 10
+        rows_loaded = 0
+        for chunk_start in range(min_year, max_year + 1, CHUNK_YEARS):
+            chunk_end = min(chunk_start + CHUNK_YEARS - 1, max_year)
+            cur.execute(f"""
+                INSERT INTO {table} 
+                (series_id, year, period, period_name, value, area_type_code, area_type_name,
+                 area_code, area_name, measure_code, measure_name, seasonal_code, seasonal_name,
+                 state_code, state_name, footnote_codes)
+                SELECT 
+                    d.series_id, d.year, d.period,
+                    CASE d.period
+                        WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                        WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                        WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                        WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                        WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                        WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                        WHEN 'M13' THEN 'AN AV'
+                        WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                        WHEN 'S03' THEN 'AN AV'
+                        WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                        WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                        WHEN 'A01' THEN 'AN AV'
+                        ELSE d.period
+                    END,
+                    d.value,
+                    s.area_type_code, at.name,
+                    s.area_code, a.name,
+                    s.measure_code, m.name,
+                    s.seasonal, seas.name,
+                    s.srd_code, st.name,
+                    d.footnote_codes
+                FROM la_data_temp d
+                JOIN la_series_temp s ON d.series_id = s.series_id
+                LEFT JOIN la_area_type_temp at ON s.area_type_code = at.code
+                LEFT JOIN la_area_temp a ON s.area_code = a.code
+                LEFT JOIN la_measure_temp m ON s.measure_code = m.code
+                LEFT JOIN la_seasonal_temp seas ON s.seasonal = seas.code
+                LEFT JOIN la_state_temp st ON s.srd_code = st.code
+                WHERE d.year BETWEEN {chunk_start} AND {chunk_end}
+            """)
+            chunk_rows = cur.rowcount
+            rows_loaded += chunk_rows
+            conn.commit()
+            print(f"    Years {chunk_start}-{chunk_end}: {chunk_rows:,} rows (total: {rows_loaded:,})")
         
         print("  Recreating indexes...")
         cur.execute("""
@@ -1581,50 +1591,60 @@ def load_jt_denormalized(client, config: dict, force: bool = False) -> bool:
         cur.execute(f"TRUNCATE TABLE {table}")
         conn.commit()
         
-        cur.execute(f"""
-            INSERT INTO {table} 
-            (series_id, year, period, period_name, value, industry_code, industry_name,
-             state_code, state_name, area_code, area_name, sizeclass_code, sizeclass_name,
-             dataelement_code, dataelement_name, ratelevel_code, ratelevel_name,
-             seasonal_code, seasonal_name, footnote_codes)
-            SELECT 
-                d.series_id, d.year, d.period,
-                CASE d.period
-                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
-                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
-                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
-                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
-                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
-                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
-                    WHEN 'M13' THEN 'AN AV'
-                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
-                    WHEN 'S03' THEN 'AN AV'
-                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
-                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
-                    WHEN 'A01' THEN 'AN AV'
-                    ELSE d.period
-                END,
-                d.value,
-                s.industry_code, ind.name,
-                s.state_code, st.name,
-                s.area_code, a.name,
-                s.sizeclass_code, sc.name,
-                s.dataelement_code, de.name,
-                s.ratelevel_code, rl.name,
-                s.seasonal, seas.name,
-                d.footnote_codes
-            FROM jt_data_temp d
-            JOIN jt_series_temp s ON d.series_id = s.series_id
-            LEFT JOIN jt_industry_temp ind ON s.industry_code = ind.code
-            LEFT JOIN jt_state_temp st ON s.state_code = st.code
-            LEFT JOIN jt_area_temp a ON s.area_code = a.code
-            LEFT JOIN jt_sizeclass_temp sc ON s.sizeclass_code = sc.code
-            LEFT JOIN jt_dataelement_temp de ON s.dataelement_code = de.code
-            LEFT JOIN jt_ratelevel_temp rl ON s.ratelevel_code = rl.code
-            LEFT JOIN jt_seasonal_temp seas ON s.seasonal = seas.code
-        """)
-        rows_loaded = cur.rowcount
-        conn.commit()
+        # Get year range for chunked insert to avoid statement timeout
+        cur.execute("SELECT MIN(year), MAX(year) FROM jt_data_temp")
+        min_year, max_year = cur.fetchone()
+        CHUNK_YEARS = 10
+        rows_loaded = 0
+        for chunk_start in range(min_year, max_year + 1, CHUNK_YEARS):
+            chunk_end = min(chunk_start + CHUNK_YEARS - 1, max_year)
+            cur.execute(f"""
+                INSERT INTO {table} 
+                (series_id, year, period, period_name, value, industry_code, industry_name,
+                 state_code, state_name, area_code, area_name, sizeclass_code, sizeclass_name,
+                 dataelement_code, dataelement_name, ratelevel_code, ratelevel_name,
+                 seasonal_code, seasonal_name, footnote_codes)
+                SELECT 
+                    d.series_id, d.year, d.period,
+                    CASE d.period
+                        WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                        WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                        WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                        WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                        WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                        WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                        WHEN 'M13' THEN 'AN AV'
+                        WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                        WHEN 'S03' THEN 'AN AV'
+                        WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                        WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                        WHEN 'A01' THEN 'AN AV'
+                        ELSE d.period
+                    END,
+                    d.value,
+                    s.industry_code, ind.name,
+                    s.state_code, st.name,
+                    s.area_code, a.name,
+                    s.sizeclass_code, sc.name,
+                    s.dataelement_code, de.name,
+                    s.ratelevel_code, rl.name,
+                    s.seasonal, seas.name,
+                    d.footnote_codes
+                FROM jt_data_temp d
+                JOIN jt_series_temp s ON d.series_id = s.series_id
+                LEFT JOIN jt_industry_temp ind ON s.industry_code = ind.code
+                LEFT JOIN jt_state_temp st ON s.state_code = st.code
+                LEFT JOIN jt_area_temp a ON s.area_code = a.code
+                LEFT JOIN jt_sizeclass_temp sc ON s.sizeclass_code = sc.code
+                LEFT JOIN jt_dataelement_temp de ON s.dataelement_code = de.code
+                LEFT JOIN jt_ratelevel_temp rl ON s.ratelevel_code = rl.code
+                LEFT JOIN jt_seasonal_temp seas ON s.seasonal = seas.code
+                WHERE d.year BETWEEN {chunk_start} AND {chunk_end}
+            """)
+            chunk_rows = cur.rowcount
+            rows_loaded += chunk_rows
+            conn.commit()
+            print(f"    Years {chunk_start}-{chunk_end}: {chunk_rows:,} rows (total: {rows_loaded:,})")
         
         print("  Recreating indexes...")
         cur.execute("""
@@ -1783,46 +1803,56 @@ def load_sa_denormalized(client, config: dict, force: bool = False) -> bool:
         cur.execute(f"TRUNCATE TABLE {table}")
         conn.commit()
         
-        cur.execute(f"""
-            INSERT INTO {table} 
-            (series_id, year, period, period_name, value, state_code, state_name,
-             area_code, area_name, industry_code, industry_name, detail_code, detail_name,
-             data_type_code, data_type_name, seasonal_code, seasonal_name, footnote_codes)
-            SELECT 
-                d.series_id, d.year, d.period,
-                CASE d.period
-                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
-                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
-                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
-                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
-                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
-                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
-                    WHEN 'M13' THEN 'AN AV'
-                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
-                    WHEN 'S03' THEN 'AN AV'
-                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
-                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
-                    WHEN 'A01' THEN 'AN AV'
-                    ELSE d.period
-                END,
-                d.value,
-                s.state_code, st.name,
-                s.area_code, a.name,
-                s.industry_code, ind.name,
-                s.detail_code, det.name,
-                s.data_type_code, dt.name,
-                s.seasonal, CASE s.seasonal WHEN 'S' THEN 'Seasonally Adjusted' WHEN 'U' THEN 'Not Seasonally Adjusted' ELSE NULL END,
-                d.footnote_codes
-            FROM sa_data_temp d
-            JOIN sa_series_temp s ON d.series_id = s.series_id
-            LEFT JOIN sa_state_temp st ON s.state_code = st.code
-            LEFT JOIN sa_area_temp a ON s.area_code = a.code
-            LEFT JOIN sa_industry_temp ind ON s.industry_code = ind.code
-            LEFT JOIN sa_detail_temp det ON s.detail_code = det.code
-            LEFT JOIN sa_data_type_temp dt ON s.data_type_code = dt.code
-        """)
-        rows_loaded = cur.rowcount
-        conn.commit()
+        # Get year range for chunked insert to avoid statement timeout
+        cur.execute("SELECT MIN(year), MAX(year) FROM sa_data_temp")
+        min_year, max_year = cur.fetchone()
+        CHUNK_YEARS = 10
+        rows_loaded = 0
+        for chunk_start in range(min_year, max_year + 1, CHUNK_YEARS):
+            chunk_end = min(chunk_start + CHUNK_YEARS - 1, max_year)
+            cur.execute(f"""
+                INSERT INTO {table} 
+                (series_id, year, period, period_name, value, state_code, state_name,
+                 area_code, area_name, industry_code, industry_name, detail_code, detail_name,
+                 data_type_code, data_type_name, seasonal_code, seasonal_name, footnote_codes)
+                SELECT 
+                    d.series_id, d.year, d.period,
+                    CASE d.period
+                        WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                        WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                        WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                        WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                        WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                        WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                        WHEN 'M13' THEN 'AN AV'
+                        WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                        WHEN 'S03' THEN 'AN AV'
+                        WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                        WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                        WHEN 'A01' THEN 'AN AV'
+                        ELSE d.period
+                    END,
+                    d.value,
+                    s.state_code, st.name,
+                    s.area_code, a.name,
+                    s.industry_code, ind.name,
+                    s.detail_code, det.name,
+                    s.data_type_code, dt.name,
+                    s.seasonal, CASE s.seasonal WHEN 'S' THEN 'Seasonally Adjusted' WHEN 'U' THEN 'Not Seasonally Adjusted' ELSE NULL END,
+                    d.footnote_codes
+                FROM sa_data_temp d
+                JOIN sa_series_temp s ON d.series_id = s.series_id
+                LEFT JOIN sa_state_temp st ON s.state_code = st.code
+                LEFT JOIN sa_area_temp a ON s.area_code = a.code
+                LEFT JOIN sa_industry_temp ind ON s.industry_code = ind.code
+                LEFT JOIN sa_detail_temp det ON s.detail_code = det.code
+                LEFT JOIN sa_data_type_temp dt ON s.data_type_code = dt.code
+                WHERE d.year BETWEEN {chunk_start} AND {chunk_end}
+            """)
+            chunk_rows = cur.rowcount
+            rows_loaded += chunk_rows
+            conn.commit()
+            print(f"    Years {chunk_start}-{chunk_end}: {chunk_rows:,} rows (total: {rows_loaded:,})")
         
         print("  Recreating indexes...")
         cur.execute("""
@@ -2000,50 +2030,60 @@ def load_oe_denormalized(client, config: dict, force: bool = False) -> bool:
         cur.execute(f"TRUNCATE TABLE {table}")
         conn.commit()
         
-        cur.execute(f"""
-            INSERT INTO {table} 
-            (series_id, year, period, period_name, value, areatype_code, areatype_name,
-             area_code, area_name, industry_code, industry_name, occupation_code, occupation_name,
-             datatype_code, datatype_name, sector_code, sector_name,
-             seasonal_code, seasonal_name, footnote_codes)
-            SELECT 
-                d.series_id, d.year, d.period,
-                CASE d.period
-                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
-                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
-                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
-                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
-                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
-                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
-                    WHEN 'M13' THEN 'AN AV'
-                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
-                    WHEN 'S03' THEN 'AN AV'
-                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
-                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
-                    WHEN 'A01' THEN 'AN AV'
-                    ELSE d.period
-                END,
-                d.value,
-                s.areatype_code, at.name,
-                s.area_code, a.name,
-                s.industry_code, i.name,
-                s.occupation_code, o.name,
-                s.datatype_code, dt.name,
-                s.sector_code, sc.name,
-                s.seasonal, se.name,
-                d.footnote_codes
-            FROM oe_data_temp d
-            JOIN oe_series_temp s ON d.series_id = s.series_id
-            LEFT JOIN oe_areatype_temp at ON s.areatype_code = at.code
-            LEFT JOIN oe_area_temp a ON s.area_code = a.code
-            LEFT JOIN oe_industry_temp i ON s.industry_code = i.code
-            LEFT JOIN oe_occupation_temp o ON s.occupation_code = o.code
-            LEFT JOIN oe_datatype_temp dt ON s.datatype_code = dt.code
-            LEFT JOIN oe_sector_temp sc ON s.sector_code = sc.code
-            LEFT JOIN oe_seasonal_temp se ON s.seasonal = se.code
-        """)
-        rows_loaded = cur.rowcount
-        conn.commit()
+        # Get year range for chunked insert to avoid statement timeout
+        cur.execute("SELECT MIN(year), MAX(year) FROM oe_data_temp")
+        min_year, max_year = cur.fetchone()
+        CHUNK_YEARS = 10
+        rows_loaded = 0
+        for chunk_start in range(min_year, max_year + 1, CHUNK_YEARS):
+            chunk_end = min(chunk_start + CHUNK_YEARS - 1, max_year)
+            cur.execute(f"""
+                INSERT INTO {table} 
+                (series_id, year, period, period_name, value, areatype_code, areatype_name,
+                 area_code, area_name, industry_code, industry_name, occupation_code, occupation_name,
+                 datatype_code, datatype_name, sector_code, sector_name,
+                 seasonal_code, seasonal_name, footnote_codes)
+                SELECT 
+                    d.series_id, d.year, d.period,
+                    CASE d.period
+                        WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                        WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                        WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                        WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                        WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                        WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                        WHEN 'M13' THEN 'AN AV'
+                        WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                        WHEN 'S03' THEN 'AN AV'
+                        WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                        WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                        WHEN 'A01' THEN 'AN AV'
+                        ELSE d.period
+                    END,
+                    d.value,
+                    s.areatype_code, at.name,
+                    s.area_code, a.name,
+                    s.industry_code, i.name,
+                    s.occupation_code, o.name,
+                    s.datatype_code, dt.name,
+                    s.sector_code, sc.name,
+                    s.seasonal, se.name,
+                    d.footnote_codes
+                FROM oe_data_temp d
+                JOIN oe_series_temp s ON d.series_id = s.series_id
+                LEFT JOIN oe_areatype_temp at ON s.areatype_code = at.code
+                LEFT JOIN oe_area_temp a ON s.area_code = a.code
+                LEFT JOIN oe_industry_temp i ON s.industry_code = i.code
+                LEFT JOIN oe_occupation_temp o ON s.occupation_code = o.code
+                LEFT JOIN oe_datatype_temp dt ON s.datatype_code = dt.code
+                LEFT JOIN oe_sector_temp sc ON s.sector_code = sc.code
+                LEFT JOIN oe_seasonal_temp se ON s.seasonal = se.code
+                WHERE d.year BETWEEN {chunk_start} AND {chunk_end}
+            """)
+            chunk_rows = cur.rowcount
+            rows_loaded += chunk_rows
+            conn.commit()
+            print(f"    Years {chunk_start}-{chunk_end}: {chunk_rows:,} rows (total: {rows_loaded:,})")
         
         print("  Recreating indexes...")
         cur.execute("""
@@ -2212,50 +2252,60 @@ def load_ci_denormalized(client, config: dict, force: bool = False) -> bool:
         cur.execute(f"TRUNCATE TABLE {table}")
         conn.commit()
         
-        cur.execute(f"""
-            INSERT INTO {table} 
-            (series_id, year, period, period_name, value, owner_code, owner_name,
-             industry_code, industry_name, occupation_code, occupation_name, area_code, area_name,
-             estimate_code, estimate_name, periodicity_code, periodicity_name,
-             seasonal_code, seasonal_name, footnote_codes)
-            SELECT 
-                d.series_id, d.year, d.period,
-                CASE d.period
-                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
-                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
-                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
-                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
-                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
-                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
-                    WHEN 'M13' THEN 'AN AV'
-                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
-                    WHEN 'S03' THEN 'AN AV'
-                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
-                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
-                    WHEN 'A01' THEN 'AN AV'
-                    ELSE d.period
-                END,
-                d.value,
-                s.owner_code, o.name,
-                s.industry_code, ind.name,
-                s.occupation_code, occ.name,
-                s.area_code, a.name,
-                s.estimate_code, e.name,
-                s.periodicity_code, p.name,
-                s.seasonal, seas.name,
-                d.footnote_codes
-            FROM ci_data_temp d
-            JOIN ci_series_temp s ON d.series_id = s.series_id
-            LEFT JOIN ci_owner_temp o ON s.owner_code = o.code
-            LEFT JOIN ci_industry_temp ind ON s.industry_code = ind.code
-            LEFT JOIN ci_occupation_temp occ ON s.occupation_code = occ.code
-            LEFT JOIN ci_area_temp a ON s.area_code = a.code
-            LEFT JOIN ci_estimate_temp e ON s.estimate_code = e.code
-            LEFT JOIN ci_periodicity_temp p ON s.periodicity_code = p.code
-            LEFT JOIN ci_seasonal_temp seas ON s.seasonal = seas.code
-        """)
-        rows_loaded = cur.rowcount
-        conn.commit()
+        # Get year range for chunked insert to avoid statement timeout
+        cur.execute("SELECT MIN(year), MAX(year) FROM ci_data_temp")
+        min_year, max_year = cur.fetchone()
+        CHUNK_YEARS = 10
+        rows_loaded = 0
+        for chunk_start in range(min_year, max_year + 1, CHUNK_YEARS):
+            chunk_end = min(chunk_start + CHUNK_YEARS - 1, max_year)
+            cur.execute(f"""
+                INSERT INTO {table} 
+                (series_id, year, period, period_name, value, owner_code, owner_name,
+                 industry_code, industry_name, occupation_code, occupation_name, area_code, area_name,
+                 estimate_code, estimate_name, periodicity_code, periodicity_name,
+                 seasonal_code, seasonal_name, footnote_codes)
+                SELECT 
+                    d.series_id, d.year, d.period,
+                    CASE d.period
+                        WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                        WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                        WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                        WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                        WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                        WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                        WHEN 'M13' THEN 'AN AV'
+                        WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                        WHEN 'S03' THEN 'AN AV'
+                        WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                        WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                        WHEN 'A01' THEN 'AN AV'
+                        ELSE d.period
+                    END,
+                    d.value,
+                    s.owner_code, o.name,
+                    s.industry_code, ind.name,
+                    s.occupation_code, occ.name,
+                    s.area_code, a.name,
+                    s.estimate_code, e.name,
+                    s.periodicity_code, p.name,
+                    s.seasonal, seas.name,
+                    d.footnote_codes
+                FROM ci_data_temp d
+                JOIN ci_series_temp s ON d.series_id = s.series_id
+                LEFT JOIN ci_owner_temp o ON s.owner_code = o.code
+                LEFT JOIN ci_industry_temp ind ON s.industry_code = ind.code
+                LEFT JOIN ci_occupation_temp occ ON s.occupation_code = occ.code
+                LEFT JOIN ci_area_temp a ON s.area_code = a.code
+                LEFT JOIN ci_estimate_temp e ON s.estimate_code = e.code
+                LEFT JOIN ci_periodicity_temp p ON s.periodicity_code = p.code
+                LEFT JOIN ci_seasonal_temp seas ON s.seasonal = seas.code
+                WHERE d.year BETWEEN {chunk_start} AND {chunk_end}
+            """)
+            chunk_rows = cur.rowcount
+            rows_loaded += chunk_rows
+            conn.commit()
+            print(f"    Years {chunk_start}-{chunk_end}: {chunk_rows:,} rows (total: {rows_loaded:,})")
         
         print("  Recreating indexes...")
         cur.execute("""
@@ -2415,43 +2465,53 @@ def load_mp_denormalized(client, config: dict, force: bool = False) -> bool:
         cur.execute(f"TRUNCATE TABLE {table}")
         conn.commit()
         
-        cur.execute(f"""
-            INSERT INTO {table} 
-            (series_id, year, period, period_name, value, sector_code, sector_name,
-             measure_code, measure_name, duration_code, duration_name,
-             seasonal_code, seasonal_name, footnote_codes)
-            SELECT 
-                d.series_id, d.year, d.period,
-                CASE d.period
-                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
-                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
-                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
-                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
-                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
-                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
-                    WHEN 'M13' THEN 'AN AV'
-                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
-                    WHEN 'S03' THEN 'AN AV'
-                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
-                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
-                    WHEN 'A01' THEN 'AN AV'
-                    ELSE d.period
-                END,
-                d.value,
-                s.sector_code, sec.name,
-                s.measure_code, m.name,
-                s.duration_code, dur.name,
-                SUBSTRING(s.series_id, 3, 1), seas.name,
-                d.footnote_codes
-            FROM mp_data_temp d
-            JOIN mp_series_temp s ON d.series_id = s.series_id
-            LEFT JOIN mp_sector_temp sec ON s.sector_code = sec.code
-            LEFT JOIN mp_measure_temp m ON s.measure_code = m.code
-            LEFT JOIN mp_duration_temp dur ON s.duration_code = dur.code
-            LEFT JOIN mp_seasonal_temp seas ON SUBSTRING(s.series_id, 3, 1) = seas.code
-        """)
-        rows_loaded = cur.rowcount
-        conn.commit()
+        # Get year range for chunked insert to avoid statement timeout
+        cur.execute("SELECT MIN(year), MAX(year) FROM mp_data_temp")
+        min_year, max_year = cur.fetchone()
+        CHUNK_YEARS = 10
+        rows_loaded = 0
+        for chunk_start in range(min_year, max_year + 1, CHUNK_YEARS):
+            chunk_end = min(chunk_start + CHUNK_YEARS - 1, max_year)
+            cur.execute(f"""
+                INSERT INTO {table} 
+                (series_id, year, period, period_name, value, sector_code, sector_name,
+                 measure_code, measure_name, duration_code, duration_name,
+                 seasonal_code, seasonal_name, footnote_codes)
+                SELECT 
+                    d.series_id, d.year, d.period,
+                    CASE d.period
+                        WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                        WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                        WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                        WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                        WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                        WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                        WHEN 'M13' THEN 'AN AV'
+                        WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                        WHEN 'S03' THEN 'AN AV'
+                        WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                        WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                        WHEN 'A01' THEN 'AN AV'
+                        ELSE d.period
+                    END,
+                    d.value,
+                    s.sector_code, sec.name,
+                    s.measure_code, m.name,
+                    s.duration_code, dur.name,
+                    SUBSTRING(s.series_id, 3, 1), seas.name,
+                    d.footnote_codes
+                FROM mp_data_temp d
+                JOIN mp_series_temp s ON d.series_id = s.series_id
+                LEFT JOIN mp_sector_temp sec ON s.sector_code = sec.code
+                LEFT JOIN mp_measure_temp m ON s.measure_code = m.code
+                LEFT JOIN mp_duration_temp dur ON s.duration_code = dur.code
+                LEFT JOIN mp_seasonal_temp seas ON SUBSTRING(s.series_id, 3, 1) = seas.code
+                WHERE d.year BETWEEN {chunk_start} AND {chunk_end}
+            """)
+            chunk_rows = cur.rowcount
+            rows_loaded += chunk_rows
+            conn.commit()
+            print(f"    Years {chunk_start}-{chunk_end}: {chunk_rows:,} rows (total: {rows_loaded:,})")
         
         print("  Recreating indexes...")
         cur.execute("""
@@ -2612,47 +2672,57 @@ def load_sm_denormalized(client, config: dict, force: bool = False) -> bool:
         cur.execute(f"TRUNCATE TABLE {table}")
         conn.commit()
         
-        cur.execute(f"""
-            INSERT INTO {table} 
-            (series_id, year, period, period_name, value, state_code, state_name,
-             area_code, area_name, supersector_code, supersector_name, industry_code, industry_name,
-             data_type_code, data_type_name, seasonal_code, seasonal_name, footnote_codes)
-            SELECT 
-                d.series_id, d.year, d.period,
-                CASE d.period
-                    WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
-                    WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
-                    WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
-                    WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
-                    WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
-                    WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
-                    WHEN 'M13' THEN 'AN AV'
-                    WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
-                    WHEN 'S03' THEN 'AN AV'
-                    WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
-                    WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
-                    WHEN 'A01' THEN 'AN AV'
-                    ELSE d.period
-                END,
-                d.value,
-                s.state_code, st.name,
-                s.area_code, a.name,
-                s.supersector_code, ss.name,
-                s.industry_code, i.name,
-                s.data_type_code, dt.name,
-                s.seasonal_code, seas.name,
-                d.footnote_codes
-            FROM sm_data_temp d
-            JOIN sm_series_temp s ON d.series_id = s.series_id
-            LEFT JOIN sm_state_temp st ON s.state_code = st.code
-            LEFT JOIN sm_area_temp a ON s.area_code = a.code
-            LEFT JOIN sm_supersector_temp ss ON s.supersector_code = ss.code
-            LEFT JOIN sm_industry_temp i ON s.industry_code = i.code
-            LEFT JOIN sm_data_type_temp dt ON s.data_type_code = dt.code
-            LEFT JOIN sm_seasonal_temp seas ON s.seasonal_code = seas.code
-        """)
-        rows_loaded = cur.rowcount
-        conn.commit()
+        # Get year range for chunked insert to avoid statement timeout
+        cur.execute("SELECT MIN(year), MAX(year) FROM sm_data_temp")
+        min_year, max_year = cur.fetchone()
+        CHUNK_YEARS = 10
+        rows_loaded = 0
+        for chunk_start in range(min_year, max_year + 1, CHUNK_YEARS):
+            chunk_end = min(chunk_start + CHUNK_YEARS - 1, max_year)
+            cur.execute(f"""
+                INSERT INTO {table} 
+                (series_id, year, period, period_name, value, state_code, state_name,
+                 area_code, area_name, supersector_code, supersector_name, industry_code, industry_name,
+                 data_type_code, data_type_name, seasonal_code, seasonal_name, footnote_codes)
+                SELECT 
+                    d.series_id, d.year, d.period,
+                    CASE d.period
+                        WHEN 'M01' THEN 'JAN' WHEN 'M02' THEN 'FEB'
+                        WHEN 'M03' THEN 'MAR' WHEN 'M04' THEN 'APR'
+                        WHEN 'M05' THEN 'MAY' WHEN 'M06' THEN 'JUN'
+                        WHEN 'M07' THEN 'JUL' WHEN 'M08' THEN 'AUG'
+                        WHEN 'M09' THEN 'SEP' WHEN 'M10' THEN 'OCT'
+                        WHEN 'M11' THEN 'NOV' WHEN 'M12' THEN 'DEC'
+                        WHEN 'M13' THEN 'AN AV'
+                        WHEN 'S01' THEN 'HALF1' WHEN 'S02' THEN 'HALF2'
+                        WHEN 'S03' THEN 'AN AV'
+                        WHEN 'Q01' THEN 'QTR1' WHEN 'Q02' THEN 'QTR2'
+                        WHEN 'Q03' THEN 'QTR3' WHEN 'Q04' THEN 'QTR4'
+                        WHEN 'A01' THEN 'AN AV'
+                        ELSE d.period
+                    END,
+                    d.value,
+                    s.state_code, st.name,
+                    s.area_code, a.name,
+                    s.supersector_code, ss.name,
+                    s.industry_code, i.name,
+                    s.data_type_code, dt.name,
+                    s.seasonal_code, seas.name,
+                    d.footnote_codes
+                FROM sm_data_temp d
+                JOIN sm_series_temp s ON d.series_id = s.series_id
+                LEFT JOIN sm_state_temp st ON s.state_code = st.code
+                LEFT JOIN sm_area_temp a ON s.area_code = a.code
+                LEFT JOIN sm_supersector_temp ss ON s.supersector_code = ss.code
+                LEFT JOIN sm_industry_temp i ON s.industry_code = i.code
+                LEFT JOIN sm_data_type_temp dt ON s.data_type_code = dt.code
+                LEFT JOIN sm_seasonal_temp seas ON s.seasonal_code = seas.code
+                WHERE d.year BETWEEN {chunk_start} AND {chunk_end}
+            """)
+            chunk_rows = cur.rowcount
+            rows_loaded += chunk_rows
+            conn.commit()
+            print(f"    Years {chunk_start}-{chunk_end}: {chunk_rows:,} rows (total: {rows_loaded:,})")
         
         print("  Recreating indexes...")
         cur.execute("""
