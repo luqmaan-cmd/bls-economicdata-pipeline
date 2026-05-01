@@ -278,18 +278,22 @@ def ensure_table_exists(table_name: str, schema_file: str) -> bool:
         cur.close()
         conn.close()
 
-def get_etag_and_last_modified(url: str) -> Tuple[Optional[str], Optional[datetime]]:
-    try:
-        response = requests.head(url, headers=HEADERS, timeout=30, allow_redirects=True, proxies=get_proxies(), verify=should_verify_ssl())
-        etag = response.headers.get('ETag', '').strip('"')
-        last_modified_str = response.headers.get('Last-Modified')
-        last_modified = None
-        if last_modified_str:
-            last_modified = parsedate_to_datetime(last_modified_str)
-        return etag, last_modified
-    except Exception as e:
-        print(f"  Error fetching headers: {e}")
-        return None, None
+def get_etag_and_last_modified(url: str, max_retries: int = 3) -> Tuple[Optional[str], Optional[datetime]]:
+    for attempt in range(max_retries):
+        try:
+            response = requests.head(url, headers=HEADERS, timeout=30, allow_redirects=True, proxies=get_proxies(), verify=should_verify_ssl())
+            etag = response.headers.get('ETag', '').strip('"')
+            last_modified_str = response.headers.get('Last-Modified')
+            last_modified = None
+            if last_modified_str:
+                last_modified = parsedate_to_datetime(last_modified_str)
+            return etag, last_modified
+        except Exception as e:
+            print(f"  Error fetching headers (attempt {attempt+1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+    print(f"  Failed to fetch headers after {max_retries} attempts")
+    return None, None
 
 def get_load_log_entry(dataset: str, data_key: str) -> Optional[dict]:
     conn = get_db_connection()
@@ -330,14 +334,31 @@ def update_load_log(dataset: str, data_key: str, etag: Optional[str], last_modif
         conn.close()
 
 def should_reload(dataset: str, data_key: str, current_etag: Optional[str]) -> bool:
-    if not current_etag:
-        return True
     entry = get_load_log_entry(dataset, data_key)
     if not entry:
         return True
     if entry['status'] == 'failed':
         return True
+    if not current_etag:
+        # ETag unavailable (flaky proxy) — don't force reload if previous load succeeded
+        print(f"  ETag unavailable, previous load status: {entry['status']} ({entry['rows_loaded']:,} rows)")
+        return False
     return entry['etag'] != current_etag
+
+def validate_row_count(dataset: str, data_key: str, rows_loaded: int) -> bool:
+    """Validate that the new row count is not suspiciously low compared to previous load.
+    Returns True if valid, False if the row count is less than 50% of the previous successful load."""
+    entry = get_load_log_entry(dataset, data_key)
+    if not entry or entry['status'] != 'success' or not entry['rows_loaded'] or entry['rows_loaded'] <= 0:
+        return True
+    previous_rows = entry['rows_loaded']
+    if rows_loaded < previous_rows * 0.5:
+        print(f"  WARNING: Row count validation FAILED! New count {rows_loaded:,} is less than 50% of previous {previous_rows:,}")
+        print(f"  This likely indicates a truncated download. Marking load as failed.")
+        return False
+    if rows_loaded < previous_rows * 0.9:
+        print(f"  WARNING: Row count dropped from {previous_rows:,} to {rows_loaded:,} ({rows_loaded/previous_rows*100:.1f}%)")
+    return True
 
 def check_url_available(url: str) -> bool:
     try:
@@ -842,6 +863,10 @@ def load_cpi_denormalized(client, config: dict, force: bool = False) -> bool:
         
         print(f"  Loaded {rows_loaded:,} rows into {table}")
         
+        if not validate_row_count('cpi', 'all', rows_loaded):
+            update_load_log('cpi', 'all', etag, last_modified, data_url, rows_loaded, 'failed', f'Row count validation failed: {rows_loaded:,} rows is less than 50% of previous load')
+            return False
+        
         update_load_log('cpi', 'all', etag, last_modified, data_url, rows_loaded, 'success')
         
         return True
@@ -1021,6 +1046,10 @@ def load_ppi_denormalized(client, config: dict, force: bool = False) -> bool:
         
         print(f"  Loaded {rows_loaded:,} rows into {table}")
         
+        if not validate_row_count('ppi', 'all', rows_loaded):
+            update_load_log('ppi', 'all', etag, last_modified, data_url, rows_loaded, 'failed', f'Row count validation failed: {rows_loaded:,} rows is less than 50% of previous load')
+            return False
+        
         update_load_log('ppi', 'all', etag, last_modified, data_url, rows_loaded, 'success')
         
         return True
@@ -1193,6 +1222,10 @@ def load_employment_denormalized(client, config: dict, force: bool = False) -> b
         conn.close()
         
         print(f"  Loaded {rows_loaded:,} rows into {table}")
+        
+        if not validate_row_count('employment', 'all', rows_loaded):
+            update_load_log('employment', 'all', etag, last_modified, data_url, rows_loaded, 'failed', f'Row count validation failed: {rows_loaded:,} rows is less than 50% of previous load')
+            return False
         
         update_load_log('employment', 'all', etag, last_modified, data_url, rows_loaded, 'success')
         
@@ -1376,6 +1409,10 @@ def load_la_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.close()
         
         print(f"  Loaded {rows_loaded:,} rows into {table}")
+        
+        if not validate_row_count('unemployment', 'all', rows_loaded):
+            update_load_log('unemployment', 'all', etag, last_modified, data_url, rows_loaded, 'failed', f'Row count validation failed: {rows_loaded:,} rows is less than 50% of previous load')
+            return False
         
         update_load_log('unemployment', 'all', etag, last_modified, data_url, rows_loaded, 'success')
         
@@ -1574,6 +1611,10 @@ def load_jt_denormalized(client, config: dict, force: bool = False) -> bool:
         
         print(f"  Loaded {rows_loaded:,} rows into {table}")
         
+        if not validate_row_count('jolts', 'all', rows_loaded):
+            update_load_log('jolts', 'all', etag, last_modified, data_url, rows_loaded, 'failed', f'Row count validation failed: {rows_loaded:,} rows is less than 50% of previous load')
+            return False
+        
         update_load_log('jolts', 'all', etag, last_modified, data_url, rows_loaded, 'success')
         
         return True
@@ -1751,6 +1792,10 @@ def load_sa_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.close()
         
         print(f"  Loaded {rows_loaded:,} rows into {table}")
+        
+        if not validate_row_count('state_employment', 'all', rows_loaded):
+            update_load_log('state_employment', 'all', etag, last_modified, data_url, rows_loaded, 'failed', f'Row count validation failed: {rows_loaded:,} rows is less than 50% of previous load')
+            return False
         
         update_load_log('state_employment', 'all', etag, last_modified, data_url, rows_loaded, 'success')
         
@@ -1953,6 +1998,10 @@ def load_oe_denormalized(client, config: dict, force: bool = False) -> bool:
         
         print(f"  Loaded {rows_loaded:,} rows into {table}")
         
+        if not validate_row_count('occupational', 'all', rows_loaded):
+            update_load_log('occupational', 'all', etag, last_modified, data_url, rows_loaded, 'failed', f'Row count validation failed: {rows_loaded:,} rows is less than 50% of previous load')
+            return False
+        
         update_load_log('occupational', 'all', etag, last_modified, data_url, rows_loaded, 'success')
         
         return True
@@ -2145,6 +2194,10 @@ def load_ci_denormalized(client, config: dict, force: bool = False) -> bool:
         
         print(f"  Loaded {rows_loaded:,} rows into {table}")
         
+        if not validate_row_count('compensation', 'all', rows_loaded):
+            update_load_log('compensation', 'all', etag, last_modified, data_url, rows_loaded, 'failed', f'Row count validation failed: {rows_loaded:,} rows is less than 50% of previous load')
+            return False
+        
         update_load_log('compensation', 'all', etag, last_modified, data_url, rows_loaded, 'success')
         
         return True
@@ -2319,6 +2372,10 @@ def load_mp_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.close()
         
         print(f"  Loaded {rows_loaded:,} rows into {table}")
+        
+        if not validate_row_count('productivity', 'all', rows_loaded):
+            update_load_log('productivity', 'all', etag, last_modified, data_url, rows_loaded, 'failed', f'Row count validation failed: {rows_loaded:,} rows is less than 50% of previous load')
+            return False
         
         update_load_log('productivity', 'all', etag, last_modified, data_url, rows_loaded, 'success')
         
@@ -2501,6 +2558,10 @@ def load_sm_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.close()
         
         print(f"  Loaded {rows_loaded:,} rows into {table}")
+        
+        if not validate_row_count('state_metro', 'all', rows_loaded):
+            update_load_log('state_metro', 'all', etag, last_modified, data_url, rows_loaded, 'failed', f'Row count validation failed: {rows_loaded:,} rows is less than 50% of previous load')
+            return False
         
         update_load_log('state_metro', 'all', etag, last_modified, data_url, rows_loaded, 'success')
         
