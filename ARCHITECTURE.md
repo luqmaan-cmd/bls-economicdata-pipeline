@@ -16,7 +16,7 @@ This document describes the architecture for ingesting U.S. Bureau of Labor Stat
  │  │   Cloud      │    │    GCS       │    │     Cloud Run Job            │   │
  │  │   Scheduler  │───>│              │    │                              │   │
  │  │              │    │  bls-econ-   │    │  bls_unified_pipeline.py     │   │
- │  │  Daily cron  │    │  data/       │    │                              │   │
+  │  │  BLS-aligned │    │  data/       │    │                              │   │
  │  │  per dataset │    │              │    │  1. HEAD check (ETag)        │   │
  │  └──────────────┘    │  raw/        │    │  2. Download via proxy       │   │
  │                      │  └──cpi/     │    │  3. Upload to GCS            │   │
@@ -92,22 +92,22 @@ Each dataset has its own Cloud Run Job, allowing independent scheduling, timeout
 
 ### 2. Cloud Scheduler
 
-**Purpose**: Trigger Cloud Run Jobs on a daily schedule
+**Purpose**: Trigger Cloud Run Jobs aligned with BLS release schedules
 
-Each job is triggered by a Cloud Scheduler HTTP target. Schedules are staggered to avoid concurrent load on the database:
+Each job is triggered by a Cloud Scheduler HTTP target. Schedules are aligned with BLS publication dates (not daily) to avoid unnecessary runs when no new data is available. All times are in Europe/London timezone (UTC+0 in winter, UTC+1 in BST):
 
-| Dataset | Schedule (UTC) |
-|---------|---------------|
-| cpi | Daily 06:00 |
-| ppi | Daily 06:15 |
-| employment | Daily 06:30 |
-| unemployment | Daily 06:45 |
-| jolts | Daily 07:00 |
-| state_employment | Daily 07:15 |
-| occupational | Daily 07:30 |
-| compensation | Daily 07:45 |
-| productivity | Daily 08:00 |
-| state_metro | Daily 08:15 |
+| Dataset | Cron Expression | Description |
+|---------|----------------|-------------|
+| cpi | `0 14 11,13 * *` | 11th and 13th of each month |
+| ppi | `0 14 12-16 * *` | 12th–16th of each month |
+| employment | `0 14 1-7 * 5` | 1st–7th of the month on Fridays |
+| unemployment | `0 15 15-31/3 * *` | Every 3rd day from 15th to 31st |
+| jolts | `0 15 1-15/3 * *` | Every 3rd day from 1st to 15th |
+| state_employment | `0 15 22-28 * *` | 22nd–28th of each month |
+| occupational | `0 15 */3 4,5 *` | Every 3rd day in April & May |
+| compensation | `0 14 */3 1,4,7,10 *` | Every 3rd day in Jan, Apr, Jul, Oct |
+| productivity | `0 14 */3 8 *` | Every 3rd day in August |
+| state_metro | `0 15 18-27/3 * *` | Every 3rd day from 18th to 27th |
 
 ### 3. Google Cloud Storage (GCS)
 
