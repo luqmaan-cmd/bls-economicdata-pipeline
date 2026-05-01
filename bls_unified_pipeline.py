@@ -2735,6 +2735,10 @@ def process_star_dataset(dataset_key: str, client, force: bool = False) -> bool:
         rows = load_fact_table(data_bytes, config['fact_table'], series_map)
         total_rows += rows
         
+        if not validate_row_count(f"{dataset_key}_fact", 'all', rows):
+            update_load_log(f"{dataset_key}_fact", 'all', etag, last_modified, data_url, rows, 'failed', f'Row count validation failed: {rows:,} rows is less than 50% of previous load')
+            return False
+        
         update_load_log(f"{dataset_key}_fact", 'all', etag, last_modified, data_url, rows, 'success')
         
         print(f"\n  {dataset_key} complete! Total rows: {total_rows:,}")
@@ -2773,6 +2777,10 @@ def process_bulk_dataset(dataset_key: str, client, force: bool = False) -> bool:
         print(f"  Downloaded from GCS: {len(data_bytes):,} bytes")
         
         rows = load_bulk_data(data_bytes, table, columns)
+        
+        if not validate_row_count(dataset_key, 'all', rows):
+            update_load_log(dataset_key, 'all', etag, last_modified, url, rows, 'failed', f'Row count validation failed: {rows:,} rows is less than 50% of previous load')
+            return False
         
         update_load_log(dataset_key, 'all', etag, last_modified, url, rows, 'success')
         
