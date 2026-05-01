@@ -521,6 +521,8 @@ def copy_from_gcs_to_table(gcs_path: str, table: str, columns: List[str], client
     if null_values is None:
         null_values = ['', '-']
     
+    CHUNK_SIZE = 500000  # rows per COPY batch
+    
     bucket = client.bucket(GCS_BUCKET)
     blob = bucket.blob(gcs_path)
     
@@ -530,58 +532,58 @@ def copy_from_gcs_to_table(gcs_path: str, table: str, columns: List[str], client
     col_str = ", ".join(columns)
     copy_sql = f"COPY {table} ({col_str}) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '', QUOTE E'\\b', HEADER false)"
     
-    class CopyTransformer:
-        def __init__(self, blob, skip_header):
-            self.blob = blob
-            self.skip_header = skip_header
-            self.first_line = True
-            self.rows = 0
+    total_rows = 0
+    chunk_rows = 0
+    buffer = io.StringIO()
+    first_line = True
+    
+    with blob.open('r', encoding='utf-8') as f:
+        for line in f:
+            line = line.rstrip('\n\r')
             
-        def __iter__(self):
-            with self.blob.open('r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.rstrip('\n\r')
-                    
-                    if self.skip_header and self.first_line and line.startswith('series_id'):
-                        self.first_line = False
-                        continue
-                    self.first_line = False
-                    
-                    if not line.strip():
-                        continue
-                    
-                    parts = line.split('\t')
-                    if len(parts) < len(columns):
-                        continue
-                    parts = parts[:len(columns)]
-                    cleaned = []
-                    for p in parts:
-                        val = p.strip()
-                        if val in null_values:
-                            cleaned.append('')
-                        else:
-                            cleaned.append(val)
-                    
-                    self.rows += 1
-                    if self.rows % 500000 == 0:
-                        print(f"    Streaming {self.rows:,} rows...")
-                        sys.stdout.flush()
-                    
-                    yield '\t'.join(cleaned) + '\n'
+            if skip_header and first_line and line.startswith('series_id'):
+                first_line = False
+                continue
+            first_line = False
+            
+            if not line.strip():
+                continue
+            
+            parts = line.split('\t')
+            if len(parts) < len(columns):
+                continue
+            parts = parts[:len(columns)]
+            cleaned = []
+            for p in parts:
+                val = p.strip()
+                if val in null_values:
+                    cleaned.append('')
+                else:
+                    cleaned.append(val)
+            
+            buffer.write('\t'.join(cleaned) + '\n')
+            chunk_rows += 1
+            total_rows += 1
+            
+            if chunk_rows >= CHUNK_SIZE:
+                buffer.seek(0)
+                cur.copy_expert(copy_sql, buffer)
+                buffer.close()
+                buffer = io.StringIO()
+                print(f"    Copied {total_rows:,} rows so far...")
+                sys.stdout.flush()
+                chunk_rows = 0
     
-    transformer = CopyTransformer(blob, skip_header)
-    
-    with io.StringIO() as buffer:
-        for line in transformer:
-            buffer.write(line)
-        
+    # Flush remaining rows
+    if chunk_rows > 0:
         buffer.seek(0)
         cur.copy_expert(copy_sql, buffer)
+    buffer.close()
     
-    print(f"  COPY complete: {transformer.rows:,} rows")
+    print(f"  COPY complete: {total_rows:,} rows")
     sys.stdout.flush()
     
-    return transformer.rows
+    return total_rows
 
 def load_bulk_data(data_bytes: bytes, table: str, columns: List[str]) -> int:
     print(f"  Loading to {table}...")
