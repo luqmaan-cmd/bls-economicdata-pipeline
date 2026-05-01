@@ -2,72 +2,65 @@
 
 ## Overview
 
-This document describes the architecture for ingesting U.S. Bureau of Labor Statistics (BLS) economic data into a production environment. The pipeline downloads bulk data files, stores them in Google Cloud Storage (GCS), and loads them into a PostgreSQL database running on a Google Cloud VM.
-
----
-
-## Data Sources
-
-### BLS Bulk Download Endpoints
-
-All data is sourced from official BLS bulk download endpoints:
-
-| Dataset | Code | Endpoint Pattern |
-|---------|------|------------------|
-| Current Employment Statistics (National) | ce | `https://download.bls.gov/pub/time.series/ce/` |
-| Current Employment Statistics (State/Area) | ces | `https://download.bls.gov/pub/time.series/sm/` |
-| Consumer Price Index | cu | `https://download.bls.gov/pub/time.series/cu/` |
-| Producer Price Index | pr | `https://download.bls.gov/pub/time.series/pr/` |
-| Import/Export Price Indexes | is | `https://download.bls.gov/pub/time.series/is/` |
-| Job Openings (JOLTS) | jt | `https://download.bls.gov/pub/time.series/jt/` |
-| Employment Cost Index | ci | `https://download.bls.gov/pub/time.series/ci/` |
-| Local Area Unemployment Statistics | la | `https://download.bls.gov/pub/time.series/la/` |
-| State/Area Employment | sm | `https://download.bls.gov/pub/time.series/sm/` |
-| Occupational Employment & Wages | oe | `https://download.bls.gov/pub/time.series/oe/` |
-| Major Sector Productivity | mp | `https://download.bls.gov/pub/time.series/mp/` |
-| Quarterly Census of Employment & Wages | qcew | `https://data.bls.gov/cew/data/files/{YEAR}/csv/{YEAR}_qtrly_singlefile.zip` |
-
-### Data Format
-
-- **Format**: CSV (comma-separated values)
-- **Compression**: ZIP (QCEW only)
-- **Encoding**: UTF-8
-- **Update Frequency**: Monthly, quarterly, or annual depending on dataset
+This document describes the architecture for ingesting U.S. Bureau of Labor Statistics (BLS) economic data into a production PostgreSQL database. The pipeline runs as a serverless Cloud Run Job on Google Cloud Platform, downloading bulk data files via an Oxylabs residential proxy, storing them in Google Cloud Storage (GCS), and loading them into PostgreSQL.
 
 ---
 
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              GOOGLE CLOUD PLATFORM                           │
-│                                                                              │
-│  ┌─────────────────┐         ┌─────────────────────────────────────────┐   │
-│  │   GCS Bucket    │         │              Google Cloud VM             │   │
-│  │                 │         │                                         │   │
-│  │  ┌───────────┐  │  gsutil │  ┌───────────┐    ┌─────────────────┐   │   │
-│  │  │  Raw CSV  │  │ ──────> │  │  Temp     │    │   PostgreSQL    │   │   │
-│  │  │  Files    │  │         │  │  Storage  │───>│   Database      │   │   │
-│  │  │  (zipped) │  │  <───── │  │  (unzip)  │    │                 │   │   │
-│  │  └───────────┘  │  upload │  └───────────┘    └─────────────────┘   │   │
-│  │                 │         │        │                               │   │
-│  │  - Permanent    │         │        ▼                               │   │
-│  │    storage      │         │  ┌───────────┐                         │   │
-│  │  - Source of    │         │  │  Cleanup  │                         │   │
-│  │    truth        │         │  │  (delete) │                         │   │
-│  │  - Backup       │         │  └───────────┘                         │   │
-│  └─────────────────┘         └─────────────────────────────────────────┘   │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                        ▲
+                                    GOOGLE CLOUD PLATFORM
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │                                                                              │
+ │  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────────────┐   │
+ │  │   Cloud      │    │    GCS       │    │     Cloud Run Job            │   │
+ │  │   Scheduler  │───>│              │    │                              │   │
+ │  │              │    │  bls-econ-   │    │  bls_unified_pipeline.py     │   │
+ │  │  Daily cron  │    │  data/       │    │                              │   │
+ │  │  per dataset │    │              │    │  1. HEAD check (ETag)        │   │
+ │  └──────────────┘    │  raw/        │    │  2. Download via proxy       │   │
+ │                      │  └──cpi/     │    │  3. Upload to GCS            │   │
+ │                      │  └──ppi/     │    │  4. Stream into PostgreSQL   │   │
+ │                      │  └──...      │    │  5. Validate row count       │   │
+ │                      │              │    │  6. Update load log         │   │
+ │                      └──────┬───────┘    └──────────┬───────────────────┘   │
+ │                             │                       │                       │
+ │                             │                       │                       │
+ │                             │    ┌──────────────────┘                       │
+ │                             │    │                                          │
+ │                             ▼    ▼                                          │
+ │                      ┌──────────────┐                                      │
+ │                      │  PostgreSQL   │                                      │
+ │                      │  (Compute VM) │                                      │
+ │                      │              │                                       │
+ │                      │  cu_data     │                                       │
+ │                      │  wp_data     │                                       │
+ │                      │  ce_data     │                                       │
+ │                      │  la_data     │                                       │
+ │                      │  jt_data     │                                       │
+ │                      │  sa_data     │                                       │
+ │                      │  oe_data     │                                       │
+ │                      │  ci_data     │                                       │
+ │                      │  mp_data     │                                       │
+ │                      │  sm_data     │                                       │
+ │                      └──────────────┘                                      │
+ │                                                                             │
+ │              ┌──────────────────────────────────────┐                       │
+ │              │  VPC Connector: bls-connector        │                       │
+ │              │  (private-ranges-only egress)        │                       │
+ │              └──────────────────────────────────────┘                       │
+ └─────────────────────────────────────────────────────────────────────────────┘
                                         │
-                                        │ HTTPS
-                                        │
-                              ┌─────────┴─────────┐
-                              │   BLS Data Source │
+                                        │ HTTPS via Oxylabs Proxy
+                                        │ (unblock.oxylabs.io:60000)
+                                        ▼
+                              ┌───────────────────┐
+                              │   BLS Data Source  │
                               │                   │
-                              │  - download.bls.gov
-                              │  - data.bls.gov   │
+                              │ download.bls.gov  │
+                              │ (Akamai-protected │
+                              │  — 403 without    │
+                              │  proxy)           │
                               └───────────────────┘
 ```
 
@@ -75,171 +68,173 @@ All data is sourced from official BLS bulk download endpoints:
 
 ## Components
 
-### 1. Google Cloud Storage (GCS) Bucket
+### 1. Cloud Run Jobs
+
+**Purpose**: Serverless execution of the data pipeline
+
+Each dataset has its own Cloud Run Job, allowing independent scheduling, timeout configuration, and resource allocation.
+
+| Job Name | Dataset | Timeout | Memory | CPU |
+|----------|---------|---------|--------|-----|
+| bls-pipeline-cpi | cpi | 20m | 512Mi | 1000m |
+| bls-pipeline-ppi | ppi | 20m | 512Mi | 1000m |
+| bls-pipeline-employment | employment | 20m | 512Mi | 1000m |
+| bls-pipeline-unemployment | unemployment | 20m | 512Mi | 1000m |
+| bls-pipeline-jolts | jolts | 20m | 512Mi | 1000m |
+| bls-pipeline-state-employment | state_employment | 20m | 512Mi | 1000m |
+| bls-pipeline-occupational | occupational | 20m | 512Mi | 1000m |
+| bls-pipeline-compensation | compensation | 20m | 512Mi | 1000m |
+| bls-pipeline-productivity | productivity | 20m | 512Mi | 1000m |
+| bls-pipeline-state-metro | state_metro | 45m | 3.5Gi | 1000m |
+| bls-pipeline-all | All 10 | 60m | 512Mi | 1000m |
+
+**Why state_metro has 3.5Gi / 45m**: The SM dataset contains ~9.7M rows — the largest dataset by far. It requires more memory for the denormalization join and more time for the full download + insert cycle.
+
+### 2. Cloud Scheduler
+
+**Purpose**: Trigger Cloud Run Jobs on a daily schedule
+
+Each job is triggered by a Cloud Scheduler HTTP target. Schedules are staggered to avoid concurrent load on the database:
+
+| Dataset | Schedule (UTC) |
+|---------|---------------|
+| cpi | Daily 06:00 |
+| ppi | Daily 06:15 |
+| employment | Daily 06:30 |
+| unemployment | Daily 06:45 |
+| jolts | Daily 07:00 |
+| state_employment | Daily 07:15 |
+| occupational | Daily 07:30 |
+| compensation | Daily 07:45 |
+| productivity | Daily 08:00 |
+| state_metro | Daily 08:15 |
+
+### 3. Google Cloud Storage (GCS)
 
 **Purpose**: Permanent storage for raw data files
 
+**Bucket**: `bls-econ-data`
+
 **Structure**:
 ```
-gs://{bucket-name}/
-├── bls/
-│   ├── csv/
-│   │   ├── ce_data.csv
-│   │   ├── cu_data.csv
-│   │   ├── pr_data.csv
+gs://bls-econ-data/
+├── raw/
+│   ├── cpi/
+│   │   ├── cu.data.0.Current
+│   │   ├── cu.area
+│   │   ├── cu.item
 │   │   └── ...
-│   └── metadata/
-│       └── last_modified.json
-└── qcew/
-    ├── 1990_qtrly_singlefile.zip
-    ├── 1991_qtrly_singlefile.zip
-    ├── ...
-    └── 2025_qtrly_singlefile.zip
+│   ├── ppi/
+│   ├── employment/
+│   └── ...
 ```
 
 **Responsibilities**:
-- Store all raw data files in original format (compressed when applicable)
-- Maintain metadata about last download timestamps and ETags
+- Store all raw data files in original TSV format
 - Serve as source of truth for re-processing and disaster recovery
-- Enable versioning for audit trail (optional)
+- Enable re-download avoidance (files checked against GCS before downloading)
 
-### 2. Google Cloud VM
-
-**Purpose**: Compute resource for data processing
-
-**Specifications**:
-- Sufficient CPU/RAM for decompression and data transformation
-- Ephemeral or persistent disk for temporary file storage
-- Network access to GCS and BLS endpoints
-- PostgreSQL installed and configured
-
-**Responsibilities**:
-- Download files from BLS endpoints
-- Decompress ZIP files to temporary storage
-- Transform data if needed (encoding, formatting)
-- Load data into PostgreSQL
-- Clean up temporary files after processing
-
-### 3. PostgreSQL Database
+### 4. PostgreSQL Database
 
 **Purpose**: Queryable data store for applications
 
-**Schema Design**:
-- One table per dataset (e.g., `cpi_data`, `employment_data`, `qcew_data`)
-- Appropriate column types for each field
-- Indexes on frequently queried columns (date, series_id, geography)
-- Partitioning for large tables (recommended for QCEW)
+**Host**: Compute Engine VM (35.214.22.65:5432)
+**Database**: `asset_identification_scheme`
 
-**Responsibilities**:
-- Store processed, queryable data
-- Support application queries with low latency
-- Maintain data integrity with constraints
+**Schema Design**:
+- One denormalized (wide) table per dataset (e.g., `cu_data`, `ce_data`, `sm_data`)
+- Schema defined in `*_schema.sql` files
+- Indexes on frequently queried columns (series_id, date, area_code)
+- Full refresh (truncate + reload) on each run
+
+**Load Log Table** (`bls_load_log`):
+Tracks every load attempt with dataset, ETag, row count, status, and timestamp. Used by `should_reload()` and `validate_row_count()` to make intelligent decisions about when to reload.
+
+### 5. Oxylabs Proxy
+
+**Purpose**: Bypass Akamai bot protection on `download.bls.gov`
+
+BLS blocks direct access from cloud providers (returns 403). The Oxylabs residential proxy (`unblock.oxylabs.io:60000`) routes requests through residential IPs. This is mandatory — the pipeline cannot reach BLS without it.
+
+**Trade-off**: Residential proxies are inherently less reliable than direct connections. The pipeline includes multiple safeguards to handle proxy flakiness (see Data Integrity section).
+
+### 6. Secret Manager
+
+**Purpose**: Store sensitive configuration
+
+| Secret | Purpose |
+|--------|---------|
+| db-host | PostgreSQL host address |
+| db-name | Database name |
+| db-password | Database password |
+| db-user | Database user |
+| bls-proxy-user | Oxylabs proxy username |
+| bls-proxy-pass | Oxylabs proxy password |
+
+Mounted as environment variables in Cloud Run Job containers.
 
 ---
 
 ## Data Flow
 
-### Initial Load (First Run)
+### Incremental Update (Daily Run)
 
 ```
-1. Check GCS bucket for existing files
-2. If empty, download all datasets from BLS endpoints
-3. Store raw files in GCS bucket
-4. For each file:
-   a. Download from GCS to VM temp storage
-   b. If ZIP, decompress to extract CSV
-   c. Load CSV into PostgreSQL using COPY command
-   d. Delete temporary files from VM
-5. Record metadata (ETag, Last-Modified, download timestamp)
-```
-
-### Incremental Update (Subsequent Runs)
-
-```
-1. For each dataset endpoint:
-   a. Fetch HTTP headers (HEAD request)
-   b. Compare ETag/Last-Modified with stored metadata
-   c. If changed:
-      - Download updated file
-      - Upload to GCS (overwrite or version)
-      - Truncate table and reload full dataset
-      - Update metadata
-   d. If unchanged, skip
-2. Clean up temporary files
+1. Cloud Scheduler triggers Cloud Run Job
+2. Pipeline checks ETag via HEAD request (3 retries with 2s backoff)
+3. should_reload() decides whether to download:
+   a. No previous load → must load
+   b. Previous load failed → must retry
+   c. ETag unavailable (proxy failure) → trust previous successful load, skip
+   d. ETag changed → must reload
+   e. ETag unchanged → skip
+4. If reload needed:
+   a. Download data file via proxy (streaming, 600s timeout)
+   b. Upload to GCS for persistence
+   c. Stream into PostgreSQL via COPY (denormalized join)
+   d. Validate row count against previous successful load
+   e. If row count < 50% of previous → mark as failed (truncated download)
+   f. If valid → mark as success in bls_load_log
+5. Pipeline exits
 ```
 
 ---
 
-## Update Detection Strategy
+## Data Integrity Safeguards
 
-### HTTP Headers for Change Detection
+### Problem: Proxy Flakiness
 
-| Header | Purpose | Usage |
-|--------|---------|-------|
-| `Last-Modified` | Timestamp of last file update | Compare with stored timestamp |
-| `ETag` | Unique identifier for file version | Compare with stored ETag |
-| `Content-Length` | File size in bytes | Quick check for size changes |
+The Oxylabs residential proxy can drop connections at any point — during HEAD requests, during data downloads, or mid-stream. This caused three distinct failure modes:
 
-### Implementation
+| Failure Mode | Symptom | Root Cause |
+|---|---|---|
+| ETag check fails | Returns `None` | Proxy drops HEAD request |
+| Unnecessary full reload | Pipeline re-downloads unchanged data | Old code treated `None` ETag as "data changed" |
+| Truncated download | Partial data loaded as "success" | Proxy drops GET mid-stream, no completeness check |
 
-```bash
-# Check if file has been updated
-curl -sI "https://data.bls.gov/cew/data/files/2025/csv/2025_qtrly_singlefile.zip" \
-  | grep -E "Last-Modified|ETag|Content-Length"
-```
+### Fix 1: ETag Retry Logic
 
-### Metadata Storage
+`get_etag_and_last_modified()` retries 3 times with 2-second backoff. If all 3 fail, returns `None` gracefully instead of crashing.
 
-Store metadata in GCS as JSON:
+### Fix 2: Smart `should_reload()`
 
-```json
-{
-  "datasets": {
-    "qcew_2025": {
-      "url": "https://data.bls.gov/cew/data/files/2025/csv/2025_qtrly_singlefile.zip",
-      "etag": "\"122b489e-63dcfcdf704e5\"",
-      "last_modified": "Mon, 05 Jan 2026 12:46:38 GMT",
-      "content_length": 157730191,
-      "downloaded_at": "2026-02-18T10:00:00Z",
-      "gcs_path": "gs://bucket/qcew/2025_qtrly_singlefile.zip"
-    }
-  }
-}
-```
+When ETag is `None`, checks the load log instead of forcing a reload:
+- Previous load succeeded → skip reload (trust existing data)
+- Previous load failed → force reload
+- No previous entry → force reload
 
----
+### Fix 3: Row Count Validation
 
-## Data Loading Strategy
+`validate_row_count()` compares new row count against previous successful load:
+- **< 50%** → mark as `failed` (truncated download detected)
+- **50-90%** → log warning but mark as `success`
+- **> 90%** → mark as `success`
 
-### PostgreSQL COPY Command
+Applied to all 10 denormalized dataset loaders.
 
-For optimal performance, use PostgreSQL's `COPY` command for bulk inserts:
+### Fix 4: Malformed Row Handling
 
-```sql
--- From file on VM
-COPY table_name FROM '/path/to/file.csv' WITH (FORMAT csv, HEADER true);
-
--- From stdin (streaming)
-\copy table_name FROM PROGRAM 'unzip -p file.zip' WITH (FORMAT csv, HEADER true);
-```
-
-### Handling Large Files
-
-For datasets with large file sizes (QCEW, CE, OES):
-
-1. **Stream processing**: Decompress and load in one pipeline
-2. **Chunked loading**: Process in batches to manage memory
-3. **Disable indexes**: Drop indexes before load, recreate after
-4. **Partitioning**: Use table partitioning for time-series data
-
-### Example: Streaming Load
-
-```bash
-# Download, decompress, and load in one pipeline
-gsutil cp gs://bucket/qcew/2025_qtrly_singlefile.zip - | \
-  unzip -p - | \
-  psql -c "COPY qcew_data FROM STDIN WITH (FORMAT csv, HEADER true);"
-```
+Rows with fewer columns than expected are skipped during COPY transforms instead of crashing the pipeline.
 
 ---
 
@@ -250,192 +245,117 @@ gsutil cp gs://bucket/qcew/2025_qtrly_singlefile.zip - | \
 BLS frequently revises historical data after initial publication:
 
 | Revision Type | Description | Impact |
-|---------------|-------------|--------|
-| **Seasonal adjustments** | Recalculated annually | Affects all prior months in year |
-| **Benchmark revisions** | Annual alignment to QCEW | Can revise up to 5 years of data |
-| **Late respondent data** | Companies report late | Monthly revisions for 2-3 months |
-| **Methodology changes** | Survey improvements | Historical data re-published |
-| **Error corrections** | Data quality fixes | Specific series corrected |
+|---|---|---|
+| Seasonal adjustments | Recalculated annually | Affects all prior months in year |
+| Benchmark revisions | Annual alignment to QCEW | Can revise up to 5 years of data |
+| Late respondent data | Companies report late | Monthly revisions for 2-3 months |
+| Methodology changes | Survey improvements | Historical data re-published |
+| Error corrections | Data quality fixes | Specific series corrected |
 
-**Example of revision cascade:**
-```
-Jan 2025: Employment reported as 150,000
-Feb 2025: Revised to 152,000 (late reports)
-Mar 2025: Revised to 148,000 (benchmark adjustment)
-```
+### Strategy: Full Refresh (Truncate + Reload)
 
-### Strategy: Full Refresh
-
-All datasets use **full refresh** (truncate + reload) rather than upsert:
+All datasets use full refresh rather than upsert:
 
 | Approach | Pros | Cons |
-|----------|------|------|
-| **Full Refresh** | Simple, guaranteed consistency, handles deletions, no key management | Re-processes all data |
-| **Upsert** | Only processes changes | Complex keys, doesn't handle deletions, stale data risk |
+|---|---|---|
+| **Full Refresh** | Simple, guaranteed consistency, handles deletions | Re-processes all data |
+| **Upsert** | Only processes changes | Complex keys, stale data risk |
 
-**Why full refresh is preferred:**
+**Why full refresh is preferred**:
+1. PostgreSQL COPY loads millions of rows in minutes
+2. Simpler logic — no unique key management, no conflict resolution
+3. Handles deletions — if BLS removes erroneous data, full refresh catches it
+4. Guaranteed consistency — database always matches source file exactly
 
-1. **COPY is fast** - PostgreSQL loads millions of rows in minutes
-2. **Simpler logic** - No unique key management, no conflict resolution
-3. **Handles deletions** - If BLS removes erroneous data, full refresh catches it
-4. **Guaranteed consistency** - Database always matches source file exactly
-5. **No stale data** - Eliminates risk of outdated rows persisting
+---
 
-### Implementation
+## Deployment
 
-```sql
--- Start transaction
-BEGIN;
+### Building & Pushing the Docker Image
 
--- Truncate existing data
-TRUNCATE TABLE cpi_data;
+```bash
+# Build for Cloud Run (linux/amd64)
+docker buildx build --platform linux/amd64 --load \
+  -t europe-west2-docker.pkg.dev/testgke-412710/bls-pipeline/bls-pipeline:latest .
 
--- Load fresh data from CSV
-COPY cpi_data FROM '/path/to/file.csv' WITH (FORMAT csv, HEADER true);
-
--- Commit transaction
-COMMIT;
+# Push to Artifact Registry
+docker push europe-west2-docker.pkg.dev/testgke-412710/bls-pipeline/bls-pipeline:latest
 ```
 
-### Dataset-Specific Approach
+### Updating Cloud Run Jobs
 
-| Dataset | Strategy | Reason |
-|---------|----------|--------|
-| CPI, PPI, Import/Export | Full Refresh | Monthly data with revisions |
-| Employment (CE, CES, SM) | Full Refresh | Monthly with frequent benchmark revisions |
-| JOLTS | Full Refresh | Monthly with 3-month revision window |
-| Local Unemployment (LA) | Full Refresh | Monthly with annual benchmarking |
-| Employment Cost Index (CI) | Full Refresh | Quarterly with revisions |
-| Productivity (MP) | Full Refresh | Quarterly with revisions |
-| QCEW | Full Refresh (by year) | Each year file is complete independent snapshot |
-| OES | Full Refresh | Annual, complete replacement |
+After pushing a new image, update each job to pick up the new digest:
 
-### QCEW Special Handling
+```bash
+# Update a single job
+gcloud run jobs update bls-pipeline-cpi \
+  --region=europe-west2 \
+  --image=europe-west2-docker.pkg.dev/testgke-412710/bls-pipeline/bls-pipeline:latest
 
-QCEW is processed **one year at a time** due to file size:
-
-```sql
--- Process each year independently
-TRUNCATE TABLE qcew_data WHERE year = 2024;
-COPY qcew_data FROM '/path/to/2024.csv' WITH (FORMAT csv, HEADER true);
-
-TRUNCATE TABLE qcew_data WHERE year = 2025;
-COPY qcew_data FROM '/path/to/2025.csv' WITH (FORMAT csv, HEADER true);
+# Update all jobs
+for dataset in cpi ppi employment unemployment jolts state_employment occupational compensation productivity state_metro; do
+  gcloud run jobs update "bls-pipeline-${dataset//_/-}" \
+    --region=europe-west2 \
+    --image=europe-west2-docker.pkg.dev/testgke-412710/bls-pipeline/bls-pipeline:latest
+done
 ```
 
-This allows:
-- Parallel processing of multiple years
-- Incremental updates for new years only
-- Smaller transaction sizes
+### Running a Job Manually
+
+```bash
+# Run a specific dataset
+gcloud run jobs execute bls-pipeline-cpi --region=europe-west2 --wait
+
+# Force re-download (requires --force flag in job args)
+# Update job args temporarily:
+gcloud run jobs update bls-pipeline-cpi \
+  --region=europe-west2 \
+  --args="--datasets=cpi,--force"
+```
 
 ---
 
-## Error Handling
+## Monitoring
 
-### Download Failures
+### Checking Job Status
 
-- Retry with exponential backoff
-- Log failed downloads
-- Alert on persistent failures
-- Resume from last successful file
+```bash
+# List recent executions
+gcloud run jobs executions list --job=bls-pipeline-cpi --region=europe-west2
 
-### Data Loading Failures
+# View logs
+gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=bls-pipeline-cpi" \
+  --limit=50 --project=testgke-412710
+```
 
-- Validate CSV structure before loading
-- Use transactions for atomic operations
-- Log rejected rows
-- Maintain staging tables for validation
+### Checking Load Log
 
-### Recovery
+```sql
+SELECT dataset, data_key, rows_loaded, status, error_message, load_timestamp
+FROM bls_load_log
+ORDER BY load_timestamp DESC;
+```
 
-- All raw files preserved in GCS
-- Metadata tracks last successful load
-- Can re-process from GCS without re-downloading
+### Checking Table Row Counts
 
----
-
-## Security Considerations
-
-### Network Security
-
-- Use VPC for VM and database communication
-- Enable private Google Access for GCS
-- Restrict egress to necessary BLS endpoints
-
-### Access Control
-
-- Use IAM roles for GCS access
-- Database credentials stored in Secret Manager
-- Service accounts with minimal permissions
-
-### Data Integrity
-
-- Verify file checksums after download
-- Validate row counts after load
-- Monitor for data anomalies
-
----
-
-## Monitoring & Alerting
-
-### Metrics to Track
-
-- Download success/failure rate
-- Time since last update per dataset
-- Database load duration
-- Storage utilization (GCS and VM disk)
-- Data freshness (latest date in each table)
-
-### Alerts
-
-- Failed downloads
-- Stale data (no updates beyond expected schedule)
-- Load failures
-- Storage capacity warnings
+```sql
+SELECT 'cu_data' AS table, COUNT(*) FROM cu_data
+UNION ALL SELECT 'wp_data', COUNT(*) FROM wp_data
+UNION ALL SELECT 'ce_data', COUNT(*) FROM ce_data
+UNION ALL SELECT 'la_data', COUNT(*) FROM la_data
+UNION ALL SELECT 'jt_data', COUNT(*) FROM jt_data
+UNION ALL SELECT 'sa_data', COUNT(*) FROM sa_data
+UNION ALL SELECT 'oe_data', COUNT(*) FROM oe_data
+UNION ALL SELECT 'ci_data', COUNT(*) FROM ci_data
+UNION ALL SELECT 'mp_data', COUNT(*) FROM mp_data
+UNION ALL SELECT 'sm_data', COUNT(*) FROM sm_data;
+```
 
 ---
 
 ## Cost Optimization
 
-### Storage
-
-- Keep files compressed in GCS (8-10x smaller)
-- Use Standard storage class for frequently accessed data
-- Consider Nearline/Coldline for historical archives
-
-### Compute
-
-- Schedule updates during off-peak hours
-- Use preemptible VMs for batch processing (with checkpointing)
-- Right-size VM based on workload
-
-### Network
-
-- Minimize cross-region transfers
-- Use same region for GCS, VM, and database
-
----
-
-## Release Schedule Reference
-
-| Dataset | Frequency | Typical Release Day | Lag |
-|---------|-----------|---------------------|-----|
-| Employment Situation | Monthly | First Friday | 1 week |
-| CPI | Monthly | ~13th of month | 2 weeks |
-| PPI | Monthly | ~15th of month | 2 weeks |
-| JOLTS | Monthly | First Tuesday | 5 weeks |
-| QCEW | Quarterly | ~6 months after quarter | 6 months |
-| Employment Cost Index | Quarterly | Last Friday of quarter | 3 weeks |
-| Import/Export Prices | Monthly | ~10th of month | 2 weeks |
-| Local Unemployment | Monthly | First Friday | 4 weeks |
-| OES | Annual | May (following year) | 6 months |
-
----
-
-## Future Considerations
-
-- **Data versioning**: Enable GCS versioning for audit trail
-- **API integration**: Use BLS API for real-time updates between bulk downloads
-- **Data quality**: Add validation and cleansing pipeline
-- **Documentation**: Auto-generate data dictionary from BLS metadata
-- **Parallel loading**: Process multiple datasets concurrently for faster refresh
+- Cloud Run Jobs only bill for execution time (no idle costs)
+- GCS Standard storage for raw files (minimal cost — files are small)
+- Staggered schedules avoid concurrent database load
+- Proxy costs are the primary ongoing expense
