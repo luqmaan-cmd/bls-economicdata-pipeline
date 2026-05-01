@@ -1369,11 +1369,24 @@ def load_la_denormalized(client, config: dict, force: bool = False) -> bool:
         
         cur.execute(f"""
             INSERT INTO {table} 
-            (series_id, year, period, value, area_type_code, area_type_name,
+            (series_id, year, period, period_name, value, area_type_code, area_type_name,
              area_code, area_name, measure_code, measure_name, seasonal_code, seasonal_name,
              state_code, state_name, footnote_codes)
             SELECT 
-                d.series_id, d.year, d.period, d.value,
+                d.series_id, d.year, d.period,
+                CASE d.period
+                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
+                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
+                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
+                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
+                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
+                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
+                    WHEN 'M13' THEN 'Annual Average'
+                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
+                    WHEN 'S03' THEN 'Annual Average'
+                    ELSE d.period
+                END,
+                d.value,
                 s.area_type_code, at.name,
                 s.area_code, a.name,
                 s.measure_code, m.name,
@@ -1565,12 +1578,25 @@ def load_jt_denormalized(client, config: dict, force: bool = False) -> bool:
         
         cur.execute(f"""
             INSERT INTO {table} 
-            (series_id, year, period, value, industry_code, industry_name,
+            (series_id, year, period, period_name, value, industry_code, industry_name,
              state_code, state_name, area_code, area_name, sizeclass_code, sizeclass_name,
              dataelement_code, dataelement_name, ratelevel_code, ratelevel_name,
              seasonal_code, seasonal_name, footnote_codes)
             SELECT 
-                d.series_id, d.year, d.period, d.value,
+                d.series_id, d.year, d.period,
+                CASE d.period
+                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
+                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
+                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
+                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
+                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
+                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
+                    WHEN 'M13' THEN 'Annual Average'
+                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
+                    WHEN 'S03' THEN 'Annual Average'
+                    ELSE d.period
+                END,
+                d.value,
                 s.industry_code, ind.name,
                 s.state_code, st.name,
                 s.area_code, a.name,
@@ -1751,11 +1777,24 @@ def load_sa_denormalized(client, config: dict, force: bool = False) -> bool:
         
         cur.execute(f"""
             INSERT INTO {table} 
-            (series_id, year, period, value, state_code, state_name,
+            (series_id, year, period, period_name, value, state_code, state_name,
              area_code, area_name, industry_code, industry_name, detail_code, detail_name,
              data_type_code, data_type_name, seasonal_code, seasonal_name, footnote_codes)
             SELECT 
-                d.series_id, d.year, d.period, d.value,
+                d.series_id, d.year, d.period,
+                CASE d.period
+                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
+                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
+                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
+                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
+                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
+                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
+                    WHEN 'M13' THEN 'Annual Average'
+                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
+                    WHEN 'S03' THEN 'Annual Average'
+                    ELSE d.period
+                END,
+                d.value,
                 s.state_code, st.name,
                 s.area_code, a.name,
                 s.industry_code, ind.name,
@@ -1952,12 +1991,25 @@ def load_oe_denormalized(client, config: dict, force: bool = False) -> bool:
         
         cur.execute(f"""
             INSERT INTO {table} 
-            (series_id, year, period, value, areatype_code, areatype_name,
+            (series_id, year, period, period_name, value, areatype_code, areatype_name,
              area_code, area_name, industry_code, industry_name, occupation_code, occupation_name,
              datatype_code, datatype_name, sector_code, sector_name,
              seasonal_code, seasonal_name, footnote_codes)
             SELECT 
-                d.series_id, d.year, d.period, d.value,
+                d.series_id, d.year, d.period,
+                CASE d.period
+                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
+                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
+                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
+                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
+                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
+                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
+                    WHEN 'M13' THEN 'Annual Average'
+                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
+                    WHEN 'S03' THEN 'Annual Average'
+                    ELSE d.period
+                END,
+                d.value,
                 s.areatype_code, at.name,
                 s.area_code, a.name,
                 s.industry_code, i.name,
@@ -2148,12 +2200,25 @@ def load_ci_denormalized(client, config: dict, force: bool = False) -> bool:
         
         cur.execute(f"""
             INSERT INTO {table} 
-            (series_id, year, period, value, owner_code, owner_name,
+            (series_id, year, period, period_name, value, owner_code, owner_name,
              industry_code, industry_name, occupation_code, occupation_name, area_code, area_name,
              estimate_code, estimate_name, periodicity_code, periodicity_name,
              seasonal_code, seasonal_name, footnote_codes)
             SELECT 
-                d.series_id, d.year, d.period, d.value,
+                d.series_id, d.year, d.period,
+                CASE d.period
+                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
+                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
+                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
+                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
+                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
+                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
+                    WHEN 'M13' THEN 'Annual Average'
+                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
+                    WHEN 'S03' THEN 'Annual Average'
+                    ELSE d.period
+                END,
+                d.value,
                 s.owner_code, o.name,
                 s.industry_code, ind.name,
                 s.occupation_code, occ.name,
@@ -2335,11 +2400,24 @@ def load_mp_denormalized(client, config: dict, force: bool = False) -> bool:
         
         cur.execute(f"""
             INSERT INTO {table} 
-            (series_id, year, period, value, sector_code, sector_name,
+            (series_id, year, period, period_name, value, sector_code, sector_name,
              measure_code, measure_name, duration_code, duration_name,
              seasonal_code, seasonal_name, footnote_codes)
             SELECT 
-                d.series_id, d.year, d.period, d.value,
+                d.series_id, d.year, d.period,
+                CASE d.period
+                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
+                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
+                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
+                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
+                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
+                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
+                    WHEN 'M13' THEN 'Annual Average'
+                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
+                    WHEN 'S03' THEN 'Annual Average'
+                    ELSE d.period
+                END,
+                d.value,
                 s.sector_code, sec.name,
                 s.measure_code, m.name,
                 s.duration_code, dur.name,
@@ -2516,11 +2594,24 @@ def load_sm_denormalized(client, config: dict, force: bool = False) -> bool:
         
         cur.execute(f"""
             INSERT INTO {table} 
-            (series_id, year, period, value, state_code, state_name,
+            (series_id, year, period, period_name, value, state_code, state_name,
              area_code, area_name, supersector_code, supersector_name, industry_code, industry_name,
              data_type_code, data_type_name, seasonal_code, seasonal_name, footnote_codes)
             SELECT 
-                d.series_id, d.year, d.period, d.value,
+                d.series_id, d.year, d.period,
+                CASE d.period
+                    WHEN 'M01' THEN 'January' WHEN 'M02' THEN 'February'
+                    WHEN 'M03' THEN 'March' WHEN 'M04' THEN 'April'
+                    WHEN 'M05' THEN 'May' WHEN 'M06' THEN 'June'
+                    WHEN 'M07' THEN 'July' WHEN 'M08' THEN 'August'
+                    WHEN 'M09' THEN 'September' WHEN 'M10' THEN 'October'
+                    WHEN 'M11' THEN 'November' WHEN 'M12' THEN 'December'
+                    WHEN 'M13' THEN 'Annual Average'
+                    WHEN 'S01' THEN 'First Half' WHEN 'S02' THEN 'Second Half'
+                    WHEN 'S03' THEN 'Annual Average'
+                    ELSE d.period
+                END,
+                d.value,
                 s.state_code, st.name,
                 s.area_code, a.name,
                 s.supersector_code, ss.name,

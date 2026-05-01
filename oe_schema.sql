@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS oe_data (
     series_id VARCHAR(35) NOT NULL,
     year INTEGER NOT NULL,
     period VARCHAR(10) NOT NULL,
+    period_name VARCHAR(50),
     value NUMERIC(14,2),
     areatype_code VARCHAR(10),
     areatype_name VARCHAR(100),

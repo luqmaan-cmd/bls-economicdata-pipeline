@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS sa_data (
     series_id VARCHAR(20) NOT NULL,
     year INTEGER NOT NULL,
     period VARCHAR(3) NOT NULL,
+    period_name VARCHAR(50),
     value NUMERIC(14,2),
     state_code VARCHAR(2),
     state_name VARCHAR(100),
