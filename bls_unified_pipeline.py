@@ -778,8 +778,9 @@ def load_cpi_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.commit()
         print(f"    Total data rows: {data_rows:,}")
         
-        print("\n  Creating index on cu_data_temp.series_id...")
+        print("\n  Creating indexes on cu_data_temp...")
         cur.execute("CREATE INDEX idx_cu_data_temp_series ON cu_data_temp(series_id)")
+        cur.execute("CREATE INDEX idx_cu_data_temp_year ON cu_data_temp(year)")
         conn.commit()
         
         print("\n  Loading dimension lookups in parallel...")
@@ -953,8 +954,9 @@ def load_ppi_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.commit()
         print(f"    Total data rows: {data_rows:,}")
         
-        print("\n  Creating index on pr_data_temp.series_id...")
+        print("\n  Creating indexes on pr_data_temp...")
         cur.execute("CREATE INDEX idx_pr_data_temp_series ON pr_data_temp(series_id)")
+        cur.execute("CREATE INDEX idx_pr_data_temp_year ON pr_data_temp(year)")
         conn.commit()
         
         print("\n  Loading dimension lookups in parallel...")
@@ -1135,8 +1137,9 @@ def load_employment_denormalized(client, config: dict, force: bool = False) -> b
         conn.commit()
         print(f"    Total data rows: {data_rows:,}")
         
-        print("\n  Creating index on ce_data_temp.series_id...")
+        print("\n  Creating indexes on ce_data_temp...")
         cur.execute("CREATE INDEX idx_ce_data_temp_series ON ce_data_temp(series_id)")
+        cur.execute("CREATE INDEX idx_ce_data_temp_year ON ce_data_temp(year)")
         conn.commit()
         
         print("\n  Loading dimension lookups in parallel...")
@@ -1320,8 +1323,9 @@ def load_la_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.commit()
         print(f"    Total data rows: {data_rows:,}")
         
-        print("\n  Creating index on la_data_temp.series_id...")
+        print("\n  Creating indexes on la_data_temp...")
         cur.execute("CREATE INDEX idx_la_data_temp_series ON la_data_temp(series_id)")
+        cur.execute("CREATE INDEX idx_la_data_temp_year ON la_data_temp(year)")
         conn.commit()
         
         print("\n  Loading dimension lookups in parallel...")
@@ -1535,8 +1539,9 @@ def load_jt_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.commit()
         print(f"    Total data rows: {data_rows:,}")
         
-        print("\n  Creating index on jt_data_temp.series_id...")
+        print("\n  Creating indexes on jt_data_temp...")
         cur.execute("CREATE INDEX idx_jt_data_temp_series ON jt_data_temp(series_id)")
+        cur.execute("CREATE INDEX idx_jt_data_temp_year ON jt_data_temp(year)")
         conn.commit()
         
         print("\n  Loading dimension lookups in parallel...")
@@ -1754,8 +1759,9 @@ def load_sa_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.commit()
         print(f"    Total data rows: {data_rows:,}")
         
-        print("\n  Creating index on sa_data_temp.series_id...")
+        print("\n  Creating indexes on sa_data_temp...")
         cur.execute("CREATE INDEX idx_sa_data_temp_series ON sa_data_temp(series_id)")
+        cur.execute("CREATE INDEX idx_sa_data_temp_year ON sa_data_temp(year)")
         conn.commit()
         
         print("\n  Loading dimension lookups in parallel...")
@@ -1972,8 +1978,9 @@ def load_oe_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.commit()
         print(f"    Total data rows: {data_rows:,}")
         
-        print("\n  Creating index on oe_data_temp.series_id...")
+        print("\n  Creating indexes on oe_data_temp...")
         cur.execute("CREATE INDEX idx_oe_data_temp_series ON oe_data_temp(series_id)")
+        cur.execute("CREATE INDEX idx_oe_data_temp_year ON oe_data_temp(year)")
         conn.commit()
         
         print("\n  Loading dimension lookups in parallel...")
@@ -2196,8 +2203,9 @@ def load_ci_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.commit()
         print(f"    Total data rows: {data_rows:,}")
         
-        print("\n  Creating index on ci_data_temp.series_id...")
+        print("\n  Creating indexes on ci_data_temp...")
         cur.execute("CREATE INDEX idx_ci_data_temp_series ON ci_data_temp(series_id)")
+        cur.execute("CREATE INDEX idx_ci_data_temp_year ON ci_data_temp(year)")
         conn.commit()
         
         print("\n  Loading dimension lookups in parallel...")
@@ -2420,8 +2428,9 @@ def load_mp_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.commit()
         print(f"    Total data rows: {data_rows:,}")
         
-        print("\n  Creating index on mp_data_temp.series_id...")
+        print("\n  Creating indexes on mp_data_temp...")
         cur.execute("CREATE INDEX idx_mp_data_temp_series ON mp_data_temp(series_id)")
+        cur.execute("CREATE INDEX idx_mp_data_temp_year ON mp_data_temp(year)")
         conn.commit()
         
         print("\n  Loading dimension lookups in parallel...")
@@ -2620,8 +2629,9 @@ def load_sm_denormalized(client, config: dict, force: bool = False) -> bool:
         conn.commit()
         print(f"    Total data rows: {data_rows:,}")
         
-        print("\n  Creating index on sm_data_temp.series_id...")
+        print("\n  Creating indexes on sm_data_temp...")
         cur.execute("CREATE INDEX idx_sm_data_temp_series ON sm_data_temp(series_id)")
+        cur.execute("CREATE INDEX idx_sm_data_temp_year ON sm_data_temp(year)")
         conn.commit()
         
         print("\n  Loading dimension lookups in parallel...")
@@ -2675,7 +2685,7 @@ def load_sm_denormalized(client, config: dict, force: bool = False) -> bool:
         # Get year range for chunked insert to avoid statement timeout
         cur.execute("SELECT MIN(year), MAX(year) FROM sm_data_temp")
         min_year, max_year = cur.fetchone()
-        CHUNK_YEARS = 10
+        CHUNK_YEARS = 2
         rows_loaded = 0
         for chunk_start in range(min_year, max_year + 1, CHUNK_YEARS):
             chunk_end = min(chunk_start + CHUNK_YEARS - 1, max_year)
